@@ -15,10 +15,72 @@ import {
 let root = null;
 let lastKey = '';
 let keyOpen = true;
+let resetArmed = false;
+let resetTimer = null;
 
 export function mount(node) {
   root = node;
   lastKey = '';
+  resetArmed = false;
+}
+
+/**
+ * Reset wipes every player and every score, and it is unrecoverable. It
+ * used to sit in the header behind a native confirm() — one stray thumb
+ * from the top-right of the screen, and some mobile browsers suppress
+ * confirm() entirely. Now it lives at the very bottom and takes two
+ * deliberate taps, with the second one disarming itself after 5 seconds.
+ */
+function resetControl(state) {
+  const live = state.phase !== 'lobby';
+
+  if (!resetArmed) {
+    return el('div', { class: 'a-danger' }, [
+      el('button', {
+        class: 'btn-danger',
+        text: live ? 'Reset the whole game' : 'Reset',
+        onclick: () => {
+          resetArmed = true;
+          lastKey = '';
+          refresh();
+          clearTimeout(resetTimer);
+          resetTimer = setTimeout(() => {
+            resetArmed = false;
+            lastKey = '';
+            refresh();
+          }, 5000);
+        },
+      }),
+    ]);
+  }
+
+  return el('div', { class: 'a-danger is-armed' }, [
+    el('p', {
+      class: 'a-danger-warn',
+      text: live
+        ? 'This deletes all ' + state.players.length + ' players and every score, mid-game. There is no undo.'
+        : 'This clears every player and score. There is no undo.',
+    }),
+    el('button', {
+      class: 'btn-danger is-armed',
+      text: 'Tap again to wipe the game',
+      onclick: () => {
+        clearTimeout(resetTimer);
+        resetArmed = false;
+        run('reset');
+      },
+    }),
+    el('button', {
+      class: 'btn-ghost',
+      text: 'Cancel',
+      onclick: () => {
+        clearTimeout(resetTimer);
+        resetArmed = false;
+        lastKey = '';
+        refresh();
+      },
+    }),
+  ]);
 }
 
 function viewKey(state) {
@@ -27,6 +89,7 @@ function viewKey(state) {
     state.round,
     state.playedCount,
     keyOpen ? 'k' : '',
+    resetArmed ? 'armed' : '',
     state.players.map((p) => p.id + ':' + p.score + ':' + (p.hasPlayed ? 1 : 0)).join(','),
     state.winner ? state.winner.playerId : '',
     state.answerKey ? 'auth' : 'anon',
@@ -57,7 +120,13 @@ function nextAction(state) {
             note: 'Round ' + state.round + ' of ' + state.totalRounds + ' complete',
           };
     default:
-      return { op: 'reset', label: 'Reset for a new game', note: 'Clears players and scores' };
+      // Deliberately NOT reset — the big primary button must never be the
+      // destructive one. Starting over goes through the guarded control.
+      return {
+        op: null,
+        label: 'Game over — final scores are up',
+        note: 'To play again, use Reset at the bottom of this page',
+      };
   }
 }
 
@@ -102,12 +171,9 @@ export function render(node, state) {
               : 'Round ' + state.round + ' / ' + state.totalRounds + ' — ' + state.phase,
         }),
       ]),
-      el('button', {
-        class: 'btn-ghost',
-        text: 'Reset',
-        onclick: () => {
-          if (confirm('Reset the game? Every player and every score is cleared.')) run('reset');
-        },
+      el('span', {
+        class: 'a-count',
+        text: state.players.length + (state.players.length === 1 ? ' player' : ' players'),
       }),
     ]),
   );
@@ -147,6 +213,7 @@ export function render(node, state) {
   if (state.answerKey) root.append(answerKey(state));
 
   root.append(leaderboard(state.players, { title: 'Standings', showCards: true }));
+  root.append(resetControl(state));
 }
 
 function answerKey(state) {

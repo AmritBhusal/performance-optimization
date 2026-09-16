@@ -358,6 +358,42 @@ body[data-offline='1'] #app::before {
 .a-phase { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 650; }
 .a-note { color: var(--ink-dim); font-size: 14px; margin: 0 0 18px; text-align: center; }
 
+.a-count { font-size: 13px; color: var(--ink-dim); white-space: nowrap; }
+
+/* Pushed to the bottom of the page, well away from the primary controls. */
+.a-danger {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.btn-danger {
+  width: 100%;
+  padding: 12px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink-faint);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.a-danger.is-armed { border-top-color: var(--bad); }
+.a-danger-warn {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: var(--bad);
+  line-height: 1.5;
+}
+.btn-danger.is-armed {
+  padding: 18px;
+  font-size: 16px;
+  font-weight: 650;
+  color: #2b0a10;
+  background: var(--bad);
+  border-color: var(--bad);
+  margin-bottom: 10px;
+}
+
 .a-warn {
   padding: 12px 14px;
   margin-bottom: 16px;

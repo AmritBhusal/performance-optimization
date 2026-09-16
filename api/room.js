@@ -253,6 +253,13 @@ module.exports = async (req, res) => {
     const out = await handle(req.method, body, req.query || {}, admin);
     res.status(200).json(Object.assign({ now: Date.now() }, out));
   } catch (e) {
-    res.status(e && e.status ? e.status : 400).json({ error: String((e && e.message) || e) });
+    // Connection failures surface as "AggregateError" with no message, which
+    // tells the host nothing. Name the likely cause instead.
+    const raw = String((e && e.message) || e);
+    const dbDown =
+      e && (e.name === 'AggregateError' || ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'ECONNRESET'].includes(e.code));
+    res.status(e && e.status ? e.status : dbDown ? 503 : 400).json({
+      error: dbDown ? 'Cannot reach the database right now — retrying shortly' : raw,
+    });
   }
 };
