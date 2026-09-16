@@ -10,11 +10,41 @@ import { el, clear, fixCard, leaderboard, emptyState } from './render.js';
 let root = null;
 let selected = null;
 let lastKey = '';
+let rejoining = false;
 
 export function mount(node) {
   root = node;
   selected = null;
   lastKey = '';
+  rejoining = false;
+}
+
+/**
+ * The seat went missing while we still believe we are in the game.
+ * Put the player back rather than dropping them on the join form — being
+ * bounced to a name prompt mid-round is the worst thing that can happen
+ * here. A genuine reset by the host is handled by the caller, which checks
+ * the game session first, so this only ever recovers an unexpected loss.
+ */
+async function autoRejoin() {
+  if (rejoining) return;
+  rejoining = true;
+  try {
+    const res = await post('join', { name: session.playerName, playerId: session.playerId });
+    session.playerId = res.playerId;
+    lastKey = '';
+    refresh();
+  } catch (e) {
+    // A refusal the server means (game full, bad name) — stop looping.
+    session.playerId = null;
+    session.playerName = null;
+    lastKey = '';
+    toast(e.message, 'bad');
+  } finally {
+    setTimeout(() => {
+      rejoining = false;
+    }, 3000);
+  }
 }
 
 /** Rebuild only when something structural changed, so a half-typed name
@@ -22,7 +52,7 @@ export function mount(node) {
 function viewKey(state) {
   const you = state.you;
   return [
-    you ? 'in' : 'out',
+    you ? 'in' : rejoining ? 'rejoining' : 'out',
     state.phase,
     state.round,
     you ? you.hand.map((c) => c.id).join(',') : '',
@@ -40,7 +70,26 @@ export function render(node, state) {
   lastKey = key;
   clear(root);
 
-  if (!state.you) return root.append(joinForm());
+  if (!state.you) {
+    const hadSeat = session.playerId && session.playerName;
+    const wasReset = session.gameSession && state.session && session.gameSession !== state.session;
+
+    if (hadSeat && wasReset) {
+      // The host started a new game. Forget the old seat and ask again.
+      session.playerId = null;
+      session.playerName = null;
+      session.gameSession = null;
+      return root.append(joinForm());
+    }
+    if (hadSeat) {
+      autoRejoin();
+      return root.append(emptyState('Getting you back in…', 'Stay on this screen.'));
+    }
+    return root.append(joinForm());
+  }
+
+  // Remember which game this seat belongs to, so a later reset is detectable.
+  if (state.session) session.gameSession = state.session;
 
   root.append(
     el('header', { class: 'p-head' }, [
@@ -161,6 +210,7 @@ function joinForm() {
     try {
       const res = await post('join', { name, playerId: session.playerId });
       session.playerId = res.playerId;
+      session.playerName = res.name;
       lastKey = '';
       refresh();
     } catch (err) {

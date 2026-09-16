@@ -201,6 +201,12 @@ body[data-offline='1'] #app::before {
 .brief-title { font-size: 34px; }
 .brief-tagline { margin: 0 0 18px; color: var(--accent); font-size: 16px; }
 .brief-context { color: var(--ink-dim); font-size: 15px; }
+.brief-question {
+  margin: 14px 0 0;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 650;
+  color: var(--accent);
+}
 
 .metrics {
   display: grid;
@@ -484,6 +490,7 @@ body[data-view='screen'] .chip { font-size: clamp(14px, 1.15vw, 22px); padding: 
 body[data-view='screen'] .brief-title { font-size: clamp(34px, 4vw, 68px); }
 body[data-view='screen'] .brief-tagline { font-size: clamp(17px, 1.5vw, 28px); }
 body[data-view='screen'] .brief-context { font-size: clamp(15px, 1.25vw, 23px); }
+body[data-view='screen'] .brief-question { font-size: clamp(17px, 1.5vw, 28px); }
 body[data-view='screen'] .metric-value { font-size: clamp(26px, 3vw, 54px); }
 body[data-view='screen'] .metric-label { font-size: clamp(11px, .9vw, 17px); }
 body[data-view='screen'] .findings li { font-size: clamp(14px, 1.15vw, 22px); margin-bottom: 11px; }

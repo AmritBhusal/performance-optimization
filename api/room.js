@@ -50,7 +50,14 @@ async function readGame() {
   }
 
   players.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
-  return { state: state || G.freshState(), players: players, plays: plays };
+
+  // Before the host's first action there is no stored state. Synthesize one
+  // WITHOUT a session id — freshState() mints a new one every call, and a
+  // session that changes on every request reads to the player page as the
+  // host resetting the game over and over.
+  if (!state) state = Object.assign(G.freshState(), { session: null });
+
+  return { state: state, players: players, plays: plays };
 }
 
 function cleanName(raw) {
@@ -114,7 +121,7 @@ async function handle(method, body, query, admin) {
       score: 0,
       hand: [],
       joinedAt: Date.now(),
-      session: game.state.session,
+      session: game.state.session || G.newId(),
     });
     return { playerId: id, name: name };
   }
@@ -163,7 +170,7 @@ async function handle(method, body, query, admin) {
       perPlayer: dealt.perPlayer,
       totalRounds: G.totalRounds(dealt.perPlayer),
       stackCount: dealt.stack.length,
-      session: game.state.session,
+      session: game.state.session || G.newId(),
     });
 
     // Scores survive a re-deal; plays do not, or round 1 would inherit the

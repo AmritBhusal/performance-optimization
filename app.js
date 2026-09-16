@@ -7,21 +7,38 @@ import * as admin from './client/admin.js';
 
 const POLL_MS = 1500;
 
+// Wrapped because localStorage throws outright in private browsing on some
+// phones, and a player losing their seat is the worst failure this app has.
+const ls = {
+  get(k) {
+    try {
+      return localStorage.getItem(k) || null;
+    } catch (e) {
+      return null;
+    }
+  },
+  set(k, v) {
+    try {
+      if (v) localStorage.setItem(k, v);
+      else localStorage.removeItem(k);
+    } catch (e) {
+      /* nothing to do — the seat is recoverable by name */
+    }
+  },
+};
+
 export const session = {
-  get playerId() {
-    return localStorage.getItem('fd:playerId') || null;
-  },
-  set playerId(v) {
-    if (v) localStorage.setItem('fd:playerId', v);
-    else localStorage.removeItem('fd:playerId');
-  },
-  get adminToken() {
-    return localStorage.getItem('fd:adminToken') || null;
-  },
-  set adminToken(v) {
-    if (v) localStorage.setItem('fd:adminToken', v);
-    else localStorage.removeItem('fd:adminToken');
-  },
+  get playerId() { return ls.get('fd:playerId'); },
+  set playerId(v) { ls.set('fd:playerId', v); },
+  // Kept so a player whose seat vanishes can be put back automatically.
+  get playerName() { return ls.get('fd:playerName'); },
+  set playerName(v) { ls.set('fd:playerName', v); },
+  // Which game the seat belongs to, so a real reset by the host is told
+  // apart from a seat that went missing for any other reason.
+  get gameSession() { return ls.get('fd:session'); },
+  set gameSession(v) { ls.set('fd:session', v); },
+  get adminToken() { return ls.get('fd:adminToken'); },
+  set adminToken(v) { ls.set('fd:adminToken', v); },
 };
 
 /** Tolerant on purpose: #/admin, #admin and #Admin all land on the host

@@ -95,8 +95,9 @@ export function scenarioBrief(scenario, opts) {
       ),
     ),
     el('p', { class: 'brief-context', text: scenario.context }),
+    scenario.question ? el('p', { class: 'brief-question', text: scenario.question }) : null,
     el('div', { class: 'findings' }, [
-      el('div', { class: 'findings-head', text: 'What the tooling shows' }),
+      el('div', { class: 'findings-head', text: 'What the numbers show' }),
       el(
         'ul',
         null,

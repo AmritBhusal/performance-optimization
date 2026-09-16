@@ -104,6 +104,7 @@ function redact(game, pid, isAdmin) {
           title: scenario.title,
           tagline: scenario.tagline,
           context: scenario.context,
+          question: scenario.question,
           metrics: scenario.metrics,
           findings: scenario.findings,
         }
