@@ -95,7 +95,7 @@ function viewKey(state) {
     resetArmed ? 'armed' : '',
     state.players.map((p) => p.id + ':' + p.score + ':' + (p.hasPlayed ? 1 : 0)).join(','),
     state.winner ? state.winner.playerId : '',
-    state.answerKey ? 'auth' : 'anon',
+    state.isAdmin ? 'auth' : 'anon',
   ].join('|');
 }
 
@@ -141,12 +141,12 @@ export function render(node, state) {
   clear(root);
   log('admin view repaint — phase ' + state.phase + ', round ' + state.round + '/' + state.totalRounds +
       ', ' + state.players.length + ' players, ' + state.playedCount + ' committed' +
-      (state.answerKey ? ', token accepted' : ', NO answer key (token not accepted)'));
+      (state.isAdmin ? ', token accepted' : ', TOKEN NOT ACCEPTED'));
 
   if (!session.adminToken) return root.append(tokenForm());
 
   // A stale or wrong token: the server answers, but never with a key.
-  if (!state.answerKey && state.phase !== 'lobby' && state.phase !== 'dealt') {
+  if (state.isAdmin === false) {
     root.append(
       el('div', { class: 'a-warn' }, [
         'Admin token rejected — controls will fail. ',
@@ -227,26 +227,14 @@ export function render(node, state) {
   root.append(resetControl(state));
 }
 
+/** Discussion notes, not an answer key: the reasoning behind the round,
+ *  with no list of which cards are right. Judging should come from the
+ *  argument in the room, not from matching chips against a checklist. */
 function answerKey(state) {
-  const k = state.answerKey;
-  const byId = new Map(state.plays.map((p) => [p.card && p.card.id, p]));
-
-  const list = (cards, cls) =>
-    el(
-      'ul',
-      { class: 'key-list ' + cls },
-      cards.map((c) =>
-        el('li', { class: byId.has(c.id) ? 'was-played' : '' }, [
-          el('span', { class: 'key-title', text: c.title }),
-          byId.has(c.id) ? el('span', { class: 'key-flag', text: 'on the table' }) : null,
-        ]),
-      ),
-    );
-
   return el('section', { class: 'a-key' }, [
     el('button', {
       class: 'a-key-toggle',
-      text: (keyOpen ? '▾ ' : '▸ ') + 'Answer key — ' + state.scenario.title,
+      text: (keyOpen ? '▾ ' : '▸ ') + 'Discussion notes — ' + state.scenario.title,
       onclick: () => {
         keyOpen = !keyOpen;
         lastKey = '';
@@ -255,9 +243,7 @@ function answerKey(state) {
     }),
     keyOpen
       ? el('div', { class: 'a-key-body' }, [
-          el('div', { class: 'key-col' }, [el('h4', { text: 'Strong plays' }), list(k.strong, 'is-strong')]),
-          el('div', { class: 'key-col' }, [el('h4', { text: 'Weak plays' }), list(k.weak, 'is-weak')]),
-          el('p', { class: 'key-argument', text: k.argument }),
+          el('p', { class: 'key-argument', text: state.answerKey.argument }),
         ])
       : null,
   ]);
@@ -285,7 +271,7 @@ function tokenForm() {
       },
     },
     [
-      el('div', { class: 'kicker', text: 'Fix Draft' }),
+      el('div', { class: 'kicker', text: 'Performance Optimization' }),
       el('h1', { text: 'Host controls' }),
       el('p', {
         class: 'join-blurb',

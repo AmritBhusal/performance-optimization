@@ -1,4 +1,4 @@
-# Fix Draft
+# Performance Optimization
 
 A card game for a standup session on web performance. Everyone gets a hand of
 real optimization fixes; each round puts a broken site on the big screen; you
@@ -87,18 +87,22 @@ Then it is one button. It always says what happens next:
 | Playing  | Reveal the cards          | Wait for the counter to reach everyone first     |
 | Revealed | *tap a card*              | Let them argue, then tap the winning card        |
 | Judged   | Show scenario 2…          | Point awarded, next round                        |
-| Final    | Reset for a new game      | Clears players and scores                        |
+| Final    | *(no action)*             | Standings are up; Reset lives at the page bottom |
 
 **5 players → 6 cards each → 6 rounds, hands empty exactly at the end.** Other
 counts work: everyone gets `floor(30 / players)` cards and the rounds stop when
 hands or scenarios run out, whichever comes first. Leftover cards stay in the
 stack. You can re-deal at any point — scores survive, plays are cleared.
 
-The admin view carries an **answer key** for the live scenario: strong plays,
-weak plays, and the argument to steer the discussion toward. Cards actually on
-the table are flagged, so you can see at a glance who found the real fix. It
-only ever reaches a client holding a valid token — the projector and the phones
-never receive it.
+The admin view carries **discussion notes** for the live scenario: the reasoning
+behind the round, to steer the argument without settling it. Deliberately not a
+list of which cards are correct — handing the host a checklist turns judging into
+ticking a box. The notes only ever reach a client holding a valid token; the
+projector and the phones never receive them.
+
+Reset is at the very bottom of the host page and takes two deliberate taps, with
+the second disarming itself after five seconds. The big primary button is never
+the destructive one.
 
 ### If something goes wrong
 
@@ -109,13 +113,17 @@ never receive it.
   you re-deal.
 - **Wrong card crowned** — no undo. Re-deal resets the round but keeps scores;
   a full Reset clears everything.
-- **Screen looks stale** — every view polls once a second; a hard refresh is
-  safe and loses nothing.
+- **Screen looks stale** — every view polls every 1.5s; a hard refresh is safe
+  and loses nothing.
+- **Something odd happened** — open the browser console and filter for
+  `fixdraft`. Every join, deal, card commit, reveal, award and reset is traced
+  on both the page and in the Vercel function logs.
 
 ## The content
 
 - `api/_lib/cards.js` — the 30 fix cards
-- `api/_lib/scenarios.js` — the 6 scenarios and their answer keys
+- `api/_lib/scenarios.js` — the 6 scenarios, their discussion notes, and the
+  strong/weak card lists (server-side only, used to validate content)
 
 Both live under `api/_lib/` rather than the repo root on purpose: Vercel reserves
 `api/` for functions and never serves it as static, so nobody can read the answer

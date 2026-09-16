@@ -248,8 +248,8 @@ function joinForm() {
   };
 
   return el('form', { class: 'join', onsubmit: submit }, [
-    el('div', { class: 'kicker', text: 'Performance Optimization' }),
-    el('h1', { text: 'Fix Draft' }),
+    el('div', { class: 'kicker', text: 'Standup — Live Exercise' }),
+    el('h1', { text: 'Performance Optimization' }),
     el('p', {
       class: 'join-blurb',
       text: 'You get a hand of fixes. Each round shows a broken site. Play the card that actually solves it, then argue your case.',

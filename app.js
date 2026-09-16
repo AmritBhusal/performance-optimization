@@ -195,7 +195,7 @@ window.addEventListener('hashchange', () => {
   mount();
 });
 
-log('Fix Draft starting — polling every ' + POLL_MS + 'ms. Stored identity:', {
+log('Performance Optimization starting — polling every ' + POLL_MS + 'ms. Stored identity:', {
   playerId: session.playerId,
   playerName: session.playerName,
   hasAdminToken: !!session.adminToken,

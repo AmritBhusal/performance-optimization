@@ -109,7 +109,12 @@ const ADMIN = 'test-token';
   // The answer key is admin-only.
   assert.strictEqual(r.body.answerKey, undefined, 'players never receive the answer key');
   const adminView = await call('GET', null, {}, ADMIN);
-  assert.ok(adminView.body.answerKey, 'admin receives the answer key');
+  assert.ok(adminView.body.answerKey, 'admin receives the discussion notes');
+  assert.ok(adminView.body.answerKey.argument, 'notes carry the reasoning');
+  assert.strictEqual(adminView.body.answerKey.strong, undefined, 'the strong-play list never leaves the server');
+  assert.strictEqual(adminView.body.answerKey.weak, undefined, 'the weak-play list never leaves the server');
+  assert.strictEqual(adminView.body.isAdmin, true, 'admin is flagged explicitly');
+  assert.strictEqual(r.body.isAdmin, false, 'players are not');
 
   // ---- play -----------------------------------------------------------
   const hands = {};

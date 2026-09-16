@@ -56,8 +56,8 @@ function lobby(state) {
 
   return el('div', { class: 's-lobby' }, [
     el('div', { class: 's-lobby-left' }, [
-      el('div', { class: 'kicker', text: 'Performance Optimization — Live Exercise' }),
-      el('h1', { class: 's-title', text: 'Fix Draft' }),
+      el('div', { class: 'kicker', text: 'Standup — Live Exercise' }),
+      el('h1', { class: 's-title', text: 'Performance Optimization' }),
       el('p', { class: 's-blurb' }, [
         'Everyone gets a hand of real optimization fixes. Each round puts a broken site on this screen. ',
         el('strong', { text: 'Play the card that actually fixes it' }),

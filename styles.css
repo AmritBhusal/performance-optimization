@@ -1,4 +1,4 @@
-/* Fix Draft — three views out of one stylesheet.
+/* Performance Optimization — three views out of one stylesheet.
    [data-view="screen"] is the projector and scales with viewport width;
    player and admin are phone-first. */
 
@@ -426,34 +426,6 @@ body[data-offline='1'] #app::before {
   cursor: pointer;
 }
 .a-key-body { padding: 4px 16px 16px; }
-.key-col h4 {
-  font-size: 12px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  margin: 14px 0 8px;
-}
-.key-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.key-list li {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  border-radius: 8px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  font-size: 12px;
-}
-.key-title { font-size: 13px; font-weight: 550; }
-.key-list.is-strong li { border-color: rgba(74, 222, 128, .35); }
-.key-list.is-weak li { border-color: rgba(251, 113, 133, .3); opacity: .8; }
-.key-list li.was-played { box-shadow: 0 0 0 2px rgba(56, 189, 248, .4); }
-.key-flag {
-  font-size: 9px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
 .key-argument {
   margin: 16px 0 0;
   padding-top: 14px;

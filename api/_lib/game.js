@@ -123,18 +123,18 @@ function redact(game, pid, isAdmin) {
     you: null,
   };
 
+  // An explicit flag, so the host page can tell a rejected token from a
+  // round that simply has no scenario (the final standings). Inferring it
+  // from the notes being absent produced a false "token rejected" warning
+  // at the end of every game.
+  out.isAdmin = !!isAdmin;
+
   if (isAdmin && scenario) {
-    // Send titles, not ids — the host reads this while people are arguing
-    // and should not have to map "cache-headers" onto a card on the table.
-    const name = (id) => {
-      const c = CARDS_BY_ID[id];
-      return { id: id, title: c ? c.title : id, category: c ? c.category : null };
-    };
-    out.answerKey = {
-      strong: scenario.answerKey.strong.map(name),
-      weak: scenario.answerKey.weak.map(name),
-      argument: scenario.answerKey.argument,
-    };
+    // Deliberately NOT the strong/weak card lists. Handing the host a
+    // checklist of correct answers turns judging into ticking a box and
+    // kills the argument the round exists to produce. The reasoning is
+    // enough to steer a discussion without deciding it.
+    out.answerKey = { argument: scenario.answerKey.argument };
   }
 
   const me = players.find((p) => p.id === pid);
