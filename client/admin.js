@@ -2,7 +2,7 @@
 // plus the answer key — which only ever reaches a client holding a valid
 // admin token.
 
-import { session, post, refresh, toast } from '../app.js';
+import { session, post, refresh, toast, log } from '../app.js';
 import {
   el,
   clear,
@@ -40,11 +40,13 @@ function resetControl(state) {
         class: 'btn-danger',
         text: live ? 'Reset the whole game' : 'Reset',
         onclick: () => {
+          log('RESET ARMED — a second tap within 5s will wipe ' + state.players.length + ' player(s)');
           resetArmed = true;
           lastKey = '';
           refresh();
           clearTimeout(resetTimer);
           resetTimer = setTimeout(() => {
+            log('reset disarmed automatically — nothing was wiped');
             resetArmed = false;
             lastKey = '';
             refresh();
@@ -65,6 +67,7 @@ function resetControl(state) {
       class: 'btn-danger is-armed',
       text: 'Tap again to wipe the game',
       onclick: () => {
+        log('RESET CONFIRMED by second tap — wiping the game');
         clearTimeout(resetTimer);
         resetArmed = false;
         run('reset');
@@ -136,6 +139,9 @@ export function render(node, state) {
   if (key === lastKey) return;
   lastKey = key;
   clear(root);
+  log('admin view repaint — phase ' + state.phase + ', round ' + state.round + '/' + state.totalRounds +
+      ', ' + state.players.length + ' players, ' + state.playedCount + ' committed' +
+      (state.answerKey ? ', token accepted' : ', NO answer key (token not accepted)'));
 
   if (!session.adminToken) return root.append(tokenForm());
 
@@ -202,7 +208,12 @@ export function render(node, state) {
           fixCard(p.card, {
             compact: true,
             state: winnerId ? (p.playerId === winnerId ? 'won' : 'lost') : null,
-            onClick: winnerId ? null : () => run('pick', { playerId: p.playerId }),
+            onClick: winnerId
+              ? null
+              : () => {
+                  log('awarding the round to ' + p.name + ' for "' + (p.card && p.card.title) + '"');
+                  run('pick', { playerId: p.playerId });
+                },
             footer: el('span', { class: 'fix-card-owner', text: p.name }),
           }),
         ),
@@ -267,6 +278,7 @@ function tokenForm() {
         e.preventDefault();
         const v = input.value.trim();
         if (!v) return toast('Enter the token', 'bad');
+        log('admin token entered (' + v.length + ' chars) — stored on this device');
         session.adminToken = v;
         lastKey = '';
         refresh();
@@ -286,10 +298,13 @@ function tokenForm() {
 }
 
 async function run(op, payload) {
+  log('HOST ACTION: ' + op, payload || '');
   try {
     await post(op, payload);
+    log('  -> ' + op + ' accepted');
     refresh();
   } catch (e) {
+    log('  -> ' + op + ' REFUSED: ' + e.message);
     toast(e.message, 'bad');
   }
 }

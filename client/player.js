@@ -4,19 +4,23 @@
 // A single tap is far too easy to fire by accident while scrolling a hand
 // of six cards on a phone.
 
-import { session, post, refresh, toast } from '../app.js';
+import { session, post, refresh, toast, log } from '../app.js';
 import { el, clear, fixCard, leaderboard, emptyState } from './render.js';
 
 let root = null;
 let selected = null;
 let lastKey = '';
 let rejoining = false;
+// Set only when the server has definitively said this seat no longer
+// exists, so a failed network call never sends anyone to the join form.
+let seatGone = false;
 
 export function mount(node) {
   root = node;
   selected = null;
   lastKey = '';
   rejoining = false;
+  seatGone = false;
 }
 
 /**
@@ -29,17 +33,34 @@ export function mount(node) {
 async function autoRejoin() {
   if (rejoining) return;
   rejoining = true;
+  log('seat missing — asking the server whether "' + session.playerName + '" still has one');
   try {
-    const res = await post('join', { name: session.playerName, playerId: session.playerId });
-    session.playerId = res.playerId;
+    const res = await post('join', {
+      name: session.playerName,
+      playerId: session.playerId,
+      // Never create. Without this a tab left open from an earlier game
+      // walks itself into the running game as a brand-new player.
+      rejoinOnly: true,
+    });
+
+    if (res.playerId) {
+      log('seat recovered as ' + res.playerId);
+      session.playerId = res.playerId;
+      seatGone = false;
+    } else {
+      // Definitive answer: the game moved on without this seat.
+      log('server says no seat exists — showing the join form');
+      seatGone = true;
+      session.playerId = null;
+      session.playerName = null;
+    }
     lastKey = '';
     refresh();
   } catch (e) {
-    // A refusal the server means (game full, bad name) — stop looping.
-    session.playerId = null;
-    session.playerName = null;
-    lastKey = '';
-    toast(e.message, 'bad');
+    // A network blip or a 503 from the database is NOT a reason to forget
+    // who this player is. Keep the identity and try again on a later poll;
+    // wiping it here used to drop every phone at once.
+    log('rejoin attempt failed (' + e.message + ') — keeping identity, will retry');
   } finally {
     setTimeout(() => {
       rejoining = false;
@@ -69,26 +90,23 @@ export function render(node, state) {
   if (key === lastKey) return;
   lastKey = key;
   clear(root);
+  log('player view repaint — phase ' + state.phase + ', round ' + state.round +
+      (state.you
+        ? ', hand ' + state.you.hand.length + ', score ' + state.you.score +
+          (state.you.playedCardId ? ', already played ' + state.you.playedCardId : ', not yet played')
+        : ', NO SEAT'));
 
   if (!state.you) {
-    const hadSeat = session.playerId && session.playerName;
-    const wasReset = session.gameSession && state.session && session.gameSession !== state.session;
-
-    if (hadSeat && wasReset) {
-      // The host started a new game. Forget the old seat and ask again.
-      session.playerId = null;
-      session.playerName = null;
-      session.gameSession = null;
-      return root.append(joinForm());
-    }
-    if (hadSeat) {
+    // The server is the only authority on whether a seat exists. Ask it,
+    // rather than guessing from a locally cached session id.
+    if (session.playerId && session.playerName && !seatGone) {
       autoRejoin();
       return root.append(emptyState('Getting you back in…', 'Stay on this screen.'));
     }
     return root.append(joinForm());
   }
 
-  // Remember which game this seat belongs to, so a later reset is detectable.
+  seatGone = false;
   if (state.session) session.gameSession = state.session;
 
   root.append(
@@ -168,6 +186,7 @@ function hand(state, live) {
         onClick: live
           ? () => {
               if (selected !== card.id) {
+                log('selected "' + card.title + '" (' + card.id + ') — tap again to commit');
                 selected = card.id;
                 lastKey = '';
                 render(root, state);
@@ -182,11 +201,14 @@ function hand(state, live) {
 }
 
 async function commit(cardId) {
+  log('committing "' + cardId + '" for round');
   try {
     await post('play', { playerId: session.playerId, cardId });
+    log('card committed — waiting for the reveal');
     selected = null;
     refresh();
   } catch (e) {
+    log('COMMIT REFUSED: ' + e.message);
     toast(e.message, 'bad');
     selected = null;
     lastKey = '';
@@ -206,14 +228,21 @@ function joinForm() {
   const submit = async (e) => {
     e.preventDefault();
     const name = input.value.trim();
-    if (!name) return toast('Type your name first', 'bad');
+    if (!name) {
+      log('join blocked — no name typed');
+      return toast('Type your name first', 'bad');
+    }
+    log('joining as "' + name + '"' + (session.playerId ? ' (reusing stored id ' + session.playerId + ')' : ''));
     try {
       const res = await post('join', { name, playerId: session.playerId });
+      log('JOINED as ' + res.name + ' (' + res.playerId + ')');
       session.playerId = res.playerId;
       session.playerName = res.name;
+      seatGone = false;
       lastKey = '';
       refresh();
     } catch (err) {
+      log('JOIN REFUSED: ' + err.message);
       toast(err.message, 'bad');
     }
   };

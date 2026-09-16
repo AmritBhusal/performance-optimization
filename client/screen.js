@@ -1,7 +1,7 @@
 // The projector view. Read-only, no controls, sized to be legible from
 // the back of the room.
 
-import { joinUrl } from '../app.js';
+import { joinUrl, log } from '../app.js';
 import {
   el,
   clear,
@@ -39,6 +39,9 @@ export function render(node, state) {
   lastKey = key;
   clear(root);
   qrDrawn = false;
+  log('screen repaint — phase ' + state.phase + ', round ' + state.round +
+      ', ' + state.playedCount + '/' + state.players.length + ' committed' +
+      (state.scenario ? ', showing "' + state.scenario.title + '"' : ''));
 
   if (state.phase === 'lobby') return root.append(lobby(state));
   if (state.phase === 'dealt') return root.append(dealt(state));
@@ -84,6 +87,7 @@ function lobby(state) {
 function drawQr(box) {
   if (qrDrawn || !window.QRCode) return;
   qrDrawn = true;
+  log('drawing join QR for ' + joinUrl());
   new window.QRCode(box, {
     text: joinUrl(),
     width: 320,

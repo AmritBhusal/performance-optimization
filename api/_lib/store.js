@@ -44,7 +44,21 @@ function pgStore() {
   const { Pool } = require('pg');
   // One connection per warm function instance; Prisma's pooled endpoint
   // does the real pooling on its side.
-  const pool = new Pool({ connectionString: CONNECTION, max: 1 });
+  const pool = new Pool({
+    connectionString: CONNECTION,
+    max: 1,
+    idleTimeoutMillis: 10000,
+    connectionTimeoutMillis: 8000,
+  });
+
+  // pg emits 'error' on the POOL when an idle connection dies — a database
+  // restart, a dropped network link, or the provider recycling a pooled
+  // connection. With no listener Node treats it as an unhandled 'error'
+  // event and kills the process, taking the whole game down with it. Log it
+  // and carry on; the next query opens a fresh connection.
+  pool.on('error', (err) => {
+    console.error('[fixdraft] idle database connection dropped:', err && err.message);
+  });
 
   let ready = null;
   const ensureTable = () => {

@@ -93,10 +93,17 @@ async function handle(method, body, query, admin) {
     const name = cleanName(body.name);
     if (!name) throw new Error('A name is required to join');
 
+    // rejoinOnly is the automatic path: a page that believes it holds a seat
+    // checking whether that seat still exists. It must NEVER create one. A
+    // tab left open from a previous game would otherwise walk itself into a
+    // running game as a brand-new player.
+    const rejoinOnly = body.rejoinOnly === true;
+
     const game = await readGame();
     const byId = body.playerId ? game.players.find((p) => p.id === body.playerId) : null;
 
     if (byId) {
+      console.log('[fixdraft] rejoin by id: "' + byId.name + '" (' + byId.id + '), ' + byId.hand.length + ' cards in hand');
       // Rejoin after a refresh or a locked screen — same seat, same hand.
       if (byId.name !== name) {
         await store.put(SEAT + byId.id, Object.assign({}, byId, { name: name }));
@@ -111,11 +118,22 @@ async function handle(method, body, query, admin) {
     // room where everyone can see each other, and the alternative is a
     // full reset every time a phone misbehaves.
     const byName = game.players.find((p) => p.name.toLowerCase() === name.toLowerCase());
-    if (byName) return { playerId: byName.id, name: byName.name };
+    if (byName) {
+      console.log('[fixdraft] rejoin by name: "' + byName.name + '" reclaimed seat ' + byName.id);
+      return { playerId: byName.id, name: byName.name };
+    }
+
+    if (rejoinOnly) {
+      // The seat is genuinely gone (host reset, or a different game).
+      // Report it plainly instead of inventing a player.
+      console.log('[fixdraft] rejoin refused, no seat for "' + name + '"');
+      return { playerId: null, reason: 'no-seat' };
+    }
 
     if (game.players.length >= MAX_PLAYERS) throw new Error('This game is full');
 
     const id = G.newId();
+    console.log('[fixdraft] new player "' + name + '" (' + id + '), now ' + (game.players.length + 1));
     await store.put(SEAT + id, {
       name: name,
       score: 0,
@@ -129,14 +147,27 @@ async function handle(method, body, query, admin) {
   if (op === 'play') {
     const game = await readGame();
     const player = game.players.find((p) => p.id === body.playerId);
-    if (!player) throw new Error('You are not in this game any more — rejoin');
-    if (game.state.phase !== 'playing') throw new Error('Not taking plays right now');
-    if (!player.hand.includes(body.cardId)) throw new Error('That card is not in your hand');
+    if (!player) {
+      console.log('[fixdraft] PLAY refused: unknown seat ' + body.playerId);
+      throw new Error('You are not in this game any more — rejoin');
+    }
+    if (game.state.phase !== 'playing') {
+      console.log('[fixdraft] PLAY refused for "' + player.name + '": phase is ' + game.state.phase);
+      throw new Error('Not taking plays right now');
+    }
+    if (!player.hand.includes(body.cardId)) {
+      console.log('[fixdraft] PLAY refused for "' + player.name + '": ' + body.cardId + ' not in hand');
+      throw new Error('That card is not in your hand');
+    }
 
     const already = game.plays.some(
       (p) => p.round === game.state.round && p.playerId === body.playerId,
     );
-    if (already) throw new Error('You already played this round');
+    if (already) {
+      console.log('[fixdraft] PLAY refused for "' + player.name + '": already played round ' + game.state.round);
+      throw new Error('You already played this round');
+    }
+    console.log('[fixdraft] PLAY "' + player.name + '" -> ' + body.cardId + ' (round ' + game.state.round + ', ' + (game.plays.filter((p) => p.round === game.state.round).length + 1) + '/' + game.players.length + ' in)');
 
     await store.putMany([
       [
@@ -154,6 +185,8 @@ async function handle(method, body, query, admin) {
   // ---- admin ops --------------------------------------------------
 
   if (op === 'reset') {
+    const before = await readGame();
+    console.log('[fixdraft] RESET — wiping ' + before.players.length + ' player(s), phase was ' + before.state.phase + ', round ' + before.state.round);
     await store.deleteAll();
     await store.put(STATE_KEY, G.freshState());
     return { ok: true };
@@ -175,6 +208,7 @@ async function handle(method, body, query, admin) {
 
     // Scores survive a re-deal; plays do not, or round 1 would inherit the
     // cards played in the previous game's round 1.
+    console.log('[fixdraft] DEAL — ' + game.players.length + ' players, ' + dealt.perPlayer + ' cards each, ' + G.totalRounds(dealt.perPlayer) + ' rounds');
     await store.deletePrefix(PLAY);
     await store.putMany(
       [[STATE_KEY, state]].concat(
@@ -187,6 +221,7 @@ async function handle(method, body, query, admin) {
   if (op === 'scenario') {
     const game = await readGame();
     const next = game.state.round + 1;
+    console.log('[fixdraft] SCENARIO — round ' + next + ' of ' + game.state.totalRounds + (next > game.state.totalRounds ? ' (game over)' : ''));
     await store.put(
       STATE_KEY,
       Object.assign({}, game.state, {
@@ -200,6 +235,7 @@ async function handle(method, body, query, admin) {
 
   if (op === 'reveal') {
     const game = await readGame();
+    console.log('[fixdraft] REVEAL — round ' + game.state.round + ', ' + game.plays.filter((p) => p.round === game.state.round).length + ' card(s) on the table');
     await store.put(STATE_KEY, Object.assign({}, game.state, { phase: 'revealed' }));
     return { ok: true };
   }
@@ -212,6 +248,7 @@ async function handle(method, body, query, admin) {
     const play = game.plays.find(
       (p) => p.round === game.state.round && p.playerId === winner.id,
     );
+    console.log('[fixdraft] PICK — round ' + game.state.round + ' to "' + winner.name + '" for ' + (play ? play.cardId : 'no card') + ', score ' + (winner.score || 0) + ' -> ' + ((winner.score || 0) + 1));
 
     await store.putMany([
       [
@@ -250,7 +287,12 @@ module.exports = async (req, res) => {
       body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
     }
     const admin = isAdmin(req.headers && req.headers['x-admin-token']);
-    const out = await handle(req.method, body, req.query || {}, admin);
+    const q = req.query || {};
+    console.log(
+      '[fixdraft] ' + req.method + ' ' + (req.method === 'POST' ? 'op=' + (body.op || '?') : 'poll') +
+      (q.pid ? ' pid=' + q.pid : '') + (admin ? ' [admin]' : ''),
+    );
+    const out = await handle(req.method, body, q, admin);
     res.status(200).json(Object.assign({ now: Date.now() }, out));
   } catch (e) {
     // Connection failures surface as "AggregateError" with no message, which
@@ -258,6 +300,7 @@ module.exports = async (req, res) => {
     const raw = String((e && e.message) || e);
     const dbDown =
       e && (e.name === 'AggregateError' || ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'ECONNRESET'].includes(e.code));
+    console.error('[fixdraft] request failed: ' + (dbDown ? 'database unreachable' : raw));
     res.status(e && e.status ? e.status : dbDown ? 503 : 400).json({
       error: dbDown ? 'Cannot reach the database right now — retrying shortly' : raw,
     });

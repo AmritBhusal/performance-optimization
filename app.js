@@ -63,13 +63,20 @@ function headers() {
 }
 
 export async function post(op, payload) {
+  const started = Date.now();
+  log('POST ' + op, payload || {});
   const res = await fetch('/api/room', {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify(Object.assign({ op }, payload || {})),
   });
   const body = await res.json().catch(() => ({ error: 'Bad response from the server' }));
-  if (!res.ok) throw new Error(body.error || 'Request failed');
+  const ms = Date.now() - started;
+  if (!res.ok) {
+    log('  <- ' + op + ' FAILED ' + res.status + ' in ' + ms + 'ms: ' + (body.error || 'unknown'));
+    throw new Error(body.error || 'Request failed');
+  }
+  log('  <- ' + op + ' ok in ' + ms + 'ms', body);
   return body;
 }
 
@@ -79,6 +86,12 @@ async function getState() {
   const body = await res.json().catch(() => ({ error: 'Bad response from the server' }));
   if (!res.ok) throw new Error(body.error || 'Request failed');
   return body;
+}
+
+/** Everything interesting goes to the console, prefixed so it is easy to
+ *  filter devtools by "fixdraft" during a game. */
+export function log(...args) {
+  console.log('[fixdraft ' + new Date().toTimeString().slice(0, 8) + ']', ...args);
 }
 
 let toastTimer = null;
@@ -106,9 +119,50 @@ export function refresh() {
   tick();
 }
 
+let lastSeen = null;
+let failures = 0;
+
+/** Narrate the things that would otherwise be invisible during a game:
+ *  who appears and disappears, when the host acts, when the game is reset. */
+function narrate(s) {
+  const prev = lastSeen;
+  lastSeen = {
+    phase: s.phase,
+    round: s.round,
+    session: s.session,
+    names: s.players.map((p) => p.name).sort().join(','),
+    count: s.players.length,
+    hasSeat: !!s.you,
+  };
+  if (!prev) {
+    log('connected — phase ' + s.phase + ', ' + s.players.length + ' player(s)', s.players.map((p) => p.name));
+    return;
+  }
+  if (prev.session !== lastSeen.session) {
+    log('GAME SESSION CHANGED', prev.session, '->', lastSeen.session, '— the host reset the game');
+  }
+  if (prev.phase !== lastSeen.phase || prev.round !== lastSeen.round) {
+    log('phase ' + prev.phase + ' -> ' + lastSeen.phase + ', round ' + lastSeen.round);
+  }
+  if (prev.names !== lastSeen.names) {
+    const before = prev.names ? prev.names.split(',') : [];
+    const after = lastSeen.names ? lastSeen.names.split(',') : [];
+    const added = after.filter((n) => !before.includes(n));
+    const removed = before.filter((n) => !after.includes(n));
+    if (added.length) log('PLAYER ADDED:', added, '(' + before.length + ' -> ' + after.length + ')');
+    if (removed.length) log('PLAYER REMOVED:', removed, '(' + before.length + ' -> ' + after.length + ')');
+  }
+  if (prev.hasSeat && !lastSeen.hasSeat) log('YOUR SEAT DISAPPEARED from the server response');
+}
+
 async function tick() {
   try {
     const state = await getState();
+    if (failures) {
+      log('back online after ' + failures + ' failed poll(s)');
+      failures = 0;
+    }
+    narrate(state);
     const json = JSON.stringify(state);
     if (json === lastPayload && !refreshNow) return;
     lastPayload = json;
@@ -116,6 +170,9 @@ async function tick() {
     views[current].render(root, state);
     document.body.dataset.offline = '';
   } catch (e) {
+    failures++;
+    // Only shout once per outage, not every 1.5s.
+    if (failures === 1) log('poll failed:', e.message, '— keeping the current screen');
     document.body.dataset.offline = '1';
   }
 }
@@ -123,14 +180,25 @@ async function tick() {
 function mount() {
   const next = route();
   if (next === current) return;
+  log('mounting "' + next + '" view for ' + location.href);
   current = next;
   document.body.dataset.view = next;
   root.innerHTML = '';
   lastPayload = '';
+  lastSeen = null;
   views[current].mount(root);
   tick();
 }
 
-window.addEventListener('hashchange', mount);
+window.addEventListener('hashchange', () => {
+  log('hash changed to "' + location.hash + '"');
+  mount();
+});
+
+log('Fix Draft starting — polling every ' + POLL_MS + 'ms. Stored identity:', {
+  playerId: session.playerId,
+  playerName: session.playerName,
+  hasAdminToken: !!session.adminToken,
+});
 mount();
 setInterval(tick, POLL_MS);
