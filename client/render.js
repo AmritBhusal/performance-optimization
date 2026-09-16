@@ -83,6 +83,9 @@ export function scenarioBrief(scenario, opts) {
         : null,
       el('h2', { class: 'brief-title', text: scenario.title }),
       el('p', { class: 'brief-tagline', text: scenario.tagline }),
+      // Sits in the header, not after the story: this is the one line
+      // everyone in the room needs, and it must never fall below the fold.
+      scenario.question ? el('p', { class: 'brief-question', text: scenario.question }) : null,
     ]),
     el(
       'div',
@@ -94,8 +97,11 @@ export function scenarioBrief(scenario, opts) {
         ]),
       ),
     ),
-    el('p', { class: 'brief-context', text: scenario.context }),
-    scenario.question ? el('p', { class: 'brief-question', text: scenario.question }) : null,
+    el(
+      'div',
+      { class: 'brief-context' },
+      [].concat(scenario.context || []).map((para) => el('p', { text: para })),
+    ),
     el('div', { class: 'findings' }, [
       el('div', { class: 'findings-head', text: 'What the numbers show' }),
       el(

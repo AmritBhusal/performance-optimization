@@ -201,6 +201,8 @@ body[data-offline='1'] #app::before {
 .brief-title { font-size: 34px; }
 .brief-tagline { margin: 0 0 18px; color: var(--accent); font-size: 16px; }
 .brief-context { color: var(--ink-dim); font-size: 15px; }
+.brief-context p { margin: 0 0 .7em; }
+.brief-context p:last-child { margin-bottom: 0; }
 .brief-question {
   margin: 14px 0 0;
   font-family: 'Space Grotesk', sans-serif;
@@ -519,14 +521,41 @@ body[data-view='screen'] .chip { font-size: clamp(14px, 1.15vw, 22px); padding: 
 
 .s-playing {
   display: grid;
-  grid-template-columns: 1.55fr .85fr;
+  grid-template-columns: 1.78fr .72fr;
   gap: clamp(24px, 3vw, 56px);
   align-items: start;
 }
-body[data-view='screen'] .brief-title { font-size: clamp(34px, 4vw, 68px); }
-body[data-view='screen'] .brief-tagline { font-size: clamp(17px, 1.5vw, 28px); }
-body[data-view='screen'] .brief-context { font-size: clamp(15px, 1.25vw, 23px); }
-body[data-view='screen'] .brief-question { font-size: clamp(17px, 1.5vw, 28px); }
+body[data-view='screen'] .brief-title { font-size: clamp(26px, min(3.1vw, 5.2vh), 52px); }
+body[data-view='screen'] .brief-tagline { font-size: clamp(15px, min(1.5vw, 2.5vh), 28px); }
+body[data-view='screen'] .brief-context { font-size: clamp(12.5px, min(1.0vw, 1.75vh), 19px); line-height: 1.5; }
+body[data-view='screen'] .brief-context p { margin-bottom: .55em; }
+body[data-view='screen'] .brief-question { font-size: clamp(15px, min(1.4vw, 2.35vh), 26px); }
+
+/* The story made the briefing tall enough to push the findings off the
+   bottom of a 1080p projector. Side by side instead, so the room can read
+   the situation and the evidence at the same time without scrolling. */
+@media (min-width: 1100px) {
+  body[data-view='screen'] .brief {
+    display: grid;
+    grid-template-columns: 0.95fr 1.05fr;
+    grid-template-areas:
+      'head head'
+      'metrics metrics'
+      'context findings';
+    column-gap: clamp(20px, 2vw, 44px);
+    align-items: start;
+  }
+  body[data-view='screen'] .brief-head { grid-area: head; }
+  body[data-view='screen'] .brief .metrics { grid-area: metrics; }
+  body[data-view='screen'] .brief-context { grid-area: context; }
+  body[data-view='screen'] .brief .findings { grid-area: findings; margin-top: 0; }
+  /* All six findings have to fit — they are the evidence the round turns on. */
+  body[data-view='screen'] .findings li { font-size: clamp(12.5px, min(1.02vw, 1.78vh), 19px); margin-bottom: 6px; }
+  body[data-view='screen'] .brief .metrics { margin: 12px 0; }
+  body[data-view='screen'] .findings { padding: clamp(12px, 1.1vw, 20px) clamp(14px, 1.3vw, 24px); }
+  body[data-view='screen'] .metric { padding: clamp(8px, .8vw, 14px) clamp(10px, 1vw, 18px); }
+  body[data-view='screen'] .metric-value { font-size: clamp(20px, min(2.4vw, 4vh), 44px); }
+}
 body[data-view='screen'] .metric-value { font-size: clamp(26px, 3vw, 54px); }
 body[data-view='screen'] .metric-label { font-size: clamp(11px, .9vw, 17px); }
 body[data-view='screen'] .findings li { font-size: clamp(14px, 1.15vw, 22px); margin-bottom: 11px; }
@@ -612,6 +641,17 @@ body[data-view='screen'] .lb-score { font-size: clamp(19px, 1.8vw, 34px); }
   font-size: clamp(22px, 2.4vw, 46px);
 }
 .podium-score { color: var(--accent); font-size: clamp(15px, 1.3vw, 26px); }
+
+/* Short projectors (720p and the like) have no spare vertical room: the
+   briefing must still end above the fold, so reclaim the page padding. */
+@media (max-height: 800px) {
+  body[data-view='screen'] #app {
+    padding-top: clamp(14px, 2vh, 28px);
+    padding-bottom: clamp(10px, 1.4vh, 24px);
+  }
+  body[data-view='screen'] .brief-tagline { margin-bottom: 10px; }
+  body[data-view='screen'] .brief .metrics { margin: 10px 0; }
+}
 
 /* Projector fallback for narrow windows (dry runs on a laptop). */
 @media (max-width: 900px) {

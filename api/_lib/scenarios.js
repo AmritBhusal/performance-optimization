@@ -1,11 +1,17 @@
 // Six scenarios, played in order.
 //
 // What goes on the big screen — context, question, metrics, findings — must
-// describe the SITUATION in plain words and never name or imply a fix. No
-// jargon, no "X is not configured", no "loading eagerly": those phrases hand
-// the answer to the room and there is nothing left to argue about. State raw
-// observations and let the players interpret them. That interpretation is
-// the whole game.
+// describe the SITUATION and never name or imply a fix. No jargon, no
+// "X is not configured", no "loading eagerly": those phrases hand the answer
+// to the room and there is nothing left to argue about.
+//
+// `context` is an array of short paragraphs. Give the room a real picture:
+// who uses this product, on what device and connection, what changed, and
+// what the complaint actually feels like to the person making it. A player
+// who cannot picture the user cannot judge which fix matters most.
+//
+// `findings` stay as flat measurements. The story explains the symptom; the
+// findings are the evidence; the diagnosis is the players' job.
 //
 // `answerKey` is where the diagnosis lives. It is admin-only and never
 // reaches a player or the projector.
@@ -16,10 +22,13 @@ const SCENARIOS = [
   {
     id: 'news-3g',
     title: 'Nepali news portal',
-    tagline: 'Read mostly on phones, on slow mobile data, in Kathmandu',
-    context:
-      'A news website for readers in Nepal. Almost everyone opens it on a phone over mobile data. The front page is a list of stories with one large photo at the top. Readers say the screen stays empty for a long time, and then the page shifts under their finger while they are trying to tap a headline.',
-    question: 'What would you fix first?',
+    tagline: 'Read on phones, on mobile data, on the morning commute',
+    context: [
+      'A news site read by about 40,000 people a day. Nine in ten of them open it on a phone, on mobile data, often on a crowded 3G connection on the way to work.',
+      'The front page is a single column: one large photo for the lead story, then a list of eighteen smaller stories underneath it.',
+      'Readers complain about two things. The screen stays blank for several seconds after they tap the link — long enough that some of them give up and close it. And when the text does appear, it jumps: they reach to tap a headline, the page moves under their thumb, and they open a different story than the one they wanted.',
+    ],
+    question: 'You can ship one fix this week. Which one, and why that one before the rest?',
     metrics: [
       { label: 'LCP', value: '6.8s', status: 'bad' },
       { label: 'INP', value: '180ms', status: 'ok' },
@@ -38,17 +47,20 @@ const SCENARIOS = [
       strong: ['img-compress', 'img-srcset', 'img-webp', 'img-dimensions', 'img-lazy', 'net-cdn'],
       weak: ['rt-worker', 'rn-virtualize', 'be-nplusone', 'rt-delegation', 'net-brotli', 'net-http2'],
       argument:
-        'LCP and CLS are both bad while INP and TTFB are fine — an image problem, not a JavaScript or server problem. The single biggest number is the 2.4 MB hero; resizing it alone probably halves LCP. CLS is a separate fault caused by the missing dimensions. The Brotli and HTTP/2 cards are dead here because both are already on — a good moment to point out that "correct fix, already applied" scores nothing.',
+        'LCP and CLS are both bad while INP and TTFB are fine — an image problem, not a JavaScript or server problem. The single biggest number is the 2.4 MB hero; resizing it alone probably halves LCP. The jumping is a separate fault caused by the missing dimensions, so a good answer names which complaint it is fixing. The Brotli and HTTP/2 cards are dead here because both are already on — a good moment to point out that "correct fix, already applied" scores nothing.',
     },
   },
 
   {
     id: 'admin-table',
     title: 'Internal admin dashboard',
-    tagline: 'Office wifi, desktop browsers, staff live in it all day',
-    context:
-      'An internal tool the operations team uses all day. One screen lists every order in the system in a single long table, with a search box above it. The page appears quickly enough. But clicking a row takes a visible moment, and typing in the search box makes the whole page stutter.',
-    question: 'What would you fix first?',
+    tagline: 'Twelve people, second monitor, nine to six every day',
+    context: [
+      'An operations team of twelve handle refunds and cancellations from one internal page. It sits open on their second monitor from nine in the morning until six at night, on office wifi, on ordinary desktop machines.',
+      'The page shows every order in the system in a single long table, with a search box above it.',
+      'Last month the company doubled the number of orders it processes. Nobody changed the page. But the team now says it "fights back". Opening it is fine — what hurts is using it. Clicking a row pauses before anything happens, and typing a customer name into the search box drops letters: they type eight characters and six arrive.',
+    ],
+    question: 'The team reckons they lose an hour a day to this. What do you fix first?',
     metrics: [
       { label: 'LCP', value: '1.9s', status: 'ok' },
       { label: 'INP', value: '740ms', status: 'bad' },
@@ -67,17 +79,20 @@ const SCENARIOS = [
       strong: ['rn-virtualize', 'rt-debounce', 'rt-delegation', 'be-paginate', 'rn-dom-size'],
       weak: ['img-webp', 'net-cdn', 'net-preconnect', 'net-brotli', 'cache-headers', 'img-lazy'],
       argument:
-        'LCP is fine and INP is catastrophic. Nothing about the network matters — the API answers in 180ms. This is main-thread work, and virtualization dominates because it removes the cause of all three symptoms at once: the long task, the node count and the listener count. Debounce and delegation are real but smaller. Watch for someone playing a network card simply because it is a "performance card" — that habit is exactly what this round punishes.',
+        'LCP is fine and INP is catastrophic. Nothing about the network matters — the data arrives in 180ms. This is main-thread work, and virtualization dominates because it removes the cause of all three symptoms at once: the long task, the node count and the listener count. Debounce and delegation are real but smaller. Watch for someone playing a network card simply because it is a "performance card" — that habit is exactly what this round punishes.',
     },
   },
 
   {
     id: 'saas-landing',
-    title: 'SaaS marketing landing page',
-    tagline: 'Paid ad traffic, mixed devices, more people leaving than before',
-    context:
-      'The main marketing page for a product. Two years of additions and nothing ever removed. It looks finished within a couple of seconds, but partway through loading the content jumps downwards. Since the last redesign, more visitors leave without clicking anything.',
-    question: 'What would you fix first?',
+    title: 'SaaS landing page',
+    tagline: 'Paid traffic, every device, and two years of additions',
+    context: [
+      'This is the page every paid advert points at. Over two years the marketing team has added a testimonial carousel, a cookie banner, a live chat widget and three tracking scripts. In those two years nothing has ever been removed.',
+      'Visitors arrive from ads on every kind of device and connection. The page looks more or less finished within a couple of seconds.',
+      'Then something happens partway through loading: the whole page lurches downward. Someone who was about to click the signup button clicks an advert instead. Since the last redesign, more visitors leave without clicking anything at all, and the ads team is asking whether the page itself is the reason they are paying for traffic that bounces.',
+    ],
+    question: 'The ads team wants one change before the next campaign. Which one?',
     metrics: [
       { label: 'LCP', value: '4.2s', status: 'bad' },
       { label: 'INP', value: '150ms', status: 'ok' },
@@ -88,25 +103,28 @@ const SCENARIOS = [
       'Of the CSS the page downloads, 71% is never used. Of the JavaScript, 64% is never used.',
       'Three stylesheets and one script sit at the top of the page, and the browser draws nothing at all until every one of them has finished downloading.',
       'The page loads nine font files totalling 320 KB — six different weights of the same typeface.',
-      'A chat widget downloads 340 KB for every visitor. Roughly 2 in 100 visitors ever open it.',
-      'A cookie banner appears about 1.2 seconds in and pushes everything below it further down the page.',
+      'The chat widget downloads 340 KB for every visitor. Roughly 2 in 100 visitors ever open it.',
+      'The cookie banner appears about 1.2 seconds in and pushes everything below it further down the page.',
       'The images are already the right size and already in a modern format.',
     ],
     answerKey: {
       strong: ['rn-critical-css', 'rn-defer', 'js-dynamic-import', 'font-subset', 'js-treeshake', 'img-dimensions'],
       weak: ['rn-virtualize', 'rt-worker', 'be-nplusone', 'img-webp', 'img-compress', 'rt-delegation'],
       argument:
-        'The "ship less code" round, and unusually many cards half-apply — that is the point, it should be the most argued. The blocking head is what holds LCP; the chat widget is the biggest single wasted download; the cookie banner is the entire CLS. img-dimensions is a legitimate sideways play if someone argues the banner needs reserved space — accept it if they argue it well. Note that js-preload is tempting here and wrong: preloading nine font files would make this worse.',
+        'The "ship less code" round, and unusually many cards half-apply — that is the point, it should be the most argued. The blocking head is what holds LCP; the chat widget is the biggest single wasted download; the cookie banner is the entire CLS and the direct cause of the misclicks. img-dimensions is a legitimate sideways play if someone argues the banner needs reserved space — accept it if they argue it well. Note that js-preload is tempting here and wrong: preloading nine font files would make this worse.',
     },
   },
 
   {
     id: 'ecommerce-ttfb',
     title: 'Online shop, category page',
-    tagline: 'Slow for everyone, everywhere, first visit or hundredth',
-    context:
-      'The category page of an online shop, showing 24 products at a time. It is slow for everybody — on fast office wifi and on phones, in every country, on a first visit and on a repeat visit. During a sale it gets dramatically worse.',
-    question: 'What would you fix first?',
+    tagline: 'Slow for everyone, everywhere, every single visit',
+    context: [
+      'The category page of an online shop, twenty-four products to a screen. It is the page most customers pass through before they buy anything.',
+      'It is slow for everybody. Slow on the office gigabit line, slow on a phone in another country, slow on a first visit and slow on the hundredth. Everyone describes it the same way: you click the category, and then nothing happens for a couple of seconds — no spinner, no half-drawn page, just the old page sitting there — and then the new page appears all at once.',
+      'During a sale, when everyone arrives at the same time, it gets dramatically worse. Last festival sale it stopped responding altogether for twenty minutes, in the middle of the busiest hour of the year.',
+    ],
+    question: 'The next sale is in three weeks. What do you fix first?',
     metrics: [
       { label: 'LCP', value: '3.4s', status: 'bad' },
       { label: 'INP', value: '120ms', status: 'ok' },
@@ -125,17 +143,20 @@ const SCENARIOS = [
       strong: ['be-nplusone', 'cache-server', 'be-paginate'],
       weak: ['img-lazy', 'img-webp', 'font-subset', 'rt-worker', 'rn-virtualize', 'net-preconnect'],
       argument:
-        'TTFB is 2.1 seconds — the browser sits doing nothing for two full seconds before it can start, and no front-end card touches that. This round exists to test whether people read TTFB before reaching for a familiar fix. The N+1 is the root cause, server caching removes the repeat cost, pagination stops the payload growing. If someone plays cache-headers or cache-sw, push back: those help the second visit, and this page is slow on the first.',
+        'TTFB is 2.1 seconds — the browser sits doing nothing for two full seconds before it can start, and no front-end card touches that. The "nothing happens, then everything at once" description is the giveaway, and this round tests whether anyone reads it. The N+1 is the root cause, server caching removes the repeat cost, pagination stops the payload growing. The sale collapse is the same fault under load. If someone plays cache-headers or cache-sw, push back: those help the second visit, and this page is slow on the first.',
     },
   },
 
   {
     id: 'react-spa',
-    title: 'Logged-in dashboard, users worldwide',
-    tagline: 'Four continents, many on mid-range Android phones',
-    context:
-      'A dashboard people log into for work, used from four continents and often on mid-range Android phones. There are two separate complaints. The first load takes a very long time. And moving between pages inside the app feels slow too, even though the app is already open. Daily users say the second day is no faster than the first.',
-    question: 'What would you fix first?',
+    title: 'Logged-in dashboard',
+    tagline: 'Four thousand users, four continents, mostly mid-range phones',
+    context: [
+      'A dashboard people log into to do their job. Around 4,000 users spread across four continents — many on mid-range Android phones, some on office laptops.',
+      'Support keeps logging two complaints separately. The first: opening the app takes a very long time. People tap, get a blank white screen, and wait. The second: once it is finally open, moving between pages inside the app is also slow — which baffles people, because as far as they are concerned the app is already loaded.',
+      'And the ones who use it every single day report the same thing: the second day is no faster than the first. Nothing they do seems to warm it up.',
+    ],
+    question: 'Three complaints, possibly three different causes. Which fix do you ship first?',
     metrics: [
       { label: 'LCP', value: '5.1s', status: 'bad' },
       { label: 'INP', value: '210ms', status: 'warn' },
@@ -146,15 +167,15 @@ const SCENARIOS = [
       'The whole app arrives as one 1.4 MB JavaScript file. On a mid-range Android phone it is 8.2 seconds before the page responds to taps.',
       'A charting library of 480 KB is inside that file. One page in the app uses charts.',
       'Every file is sent with instructions telling the browser not to keep a copy, so people who return download all of it again.',
-      'The page contacts three other companies’ servers for fonts, analytics and a support widget. Each connection takes about 600ms to set up before any data moves.',
+      'Fonts, analytics and a support widget come from three other companies. Each connection takes about 600ms to set up.',
       'Moving between pages inside the app fetches data the app already had moments earlier.',
-      'Images and fonts are already optimised, and the server responds in 180ms.',
+      'Images and fonts are already optimised. The server responds in 180ms.',
     ],
     answerKey: {
       strong: ['js-split', 'js-dynamic-import', 'cache-headers', 'net-preconnect', 'cache-sw', 'net-prefetch', 'js-treeshake'],
       weak: ['img-compress', 'rn-virtualize', 'be-nplusone', 'img-dimensions', 'rn-transform-opacity'],
       argument:
-        'The widest field in the game — most bundle and caching cards are genuinely playable, so judge on the argument rather than the category. The three complaints map to three different fixes: splitting fixes the first load, cache headers fix the second visit, prefetch or a service worker fix navigation. "Do not keep a copy" on every file is the most embarrassing line in the findings and somebody should say so out loud.',
+        'The widest field in the game — most bundle and caching cards are genuinely playable, so judge on the argument rather than the category. The three complaints map to three different fixes: splitting fixes the first load, cache headers fix "the second day is no faster", prefetch or a service worker fix navigation. A strong answer says which of the three complaints it is aimed at. "Do not keep a copy" on every file is the most embarrassing line in the findings and somebody should say so out loud.',
     },
   },
 
@@ -162,9 +183,12 @@ const SCENARIOS = [
     id: 'trap-round',
     title: 'The one that looks obvious',
     tagline: 'Final round. Read every line before you play.',
-    context:
-      'A content site that a previous team already spent three months making faster. It is still slow. Someone senior has proposed joining the 42 JavaScript files back into one file, to cut down the number of requests the browser has to make. Before anyone agrees with them, read the numbers.',
-    question: 'What would you fix first — and is the suggestion on the table a good one?',
+    context: [
+      'A content site that a previous team already spent three months making faster. They did good work, and most of it was the right work. It is still slower than it should be.',
+      'In the meeting where this was discussed, the most senior engineer in the room proposed joining the 42 JavaScript files back into one file, to cut down the number of requests the browser has to make. Everybody nodded. It sounds obviously right.',
+      'Before you agree with them, read the numbers below. All of them.',
+    ],
+    question: 'Is the suggestion on the table a good one — and if not, what would you do instead?',
     metrics: [
       { label: 'LCP', value: '3.1s', status: 'bad' },
       { label: 'INP', value: '90ms', status: 'ok' },
@@ -183,7 +207,7 @@ const SCENARIOS = [
       strong: ['img-compress', 'img-webp'],
       weak: ['net-concat', 'net-http2', 'net-brotli', 'cache-headers', 'js-split', 'net-cdn', 'cache-sw'],
       argument:
-        'The whole round is a trap. net-concat is the bait and it is wrong twice over: HTTP/3 already removed the per-request cost that made bundling worthwhile, and merging files that browsers cache individually means one small change invalidates all 180 KB. Every other infrastructure card is already applied. The real answer is sitting in plain sight — a 1.1 MB PNG displayed at 140x40, which is also the largest thing on screen. Award the point to whoever ignores the senior engineer and reads the waterfall. If nobody does, that is the best possible ending to the session.',
+        'The whole round is a trap. net-concat is the bait and it is wrong twice over: HTTP/3 already removed the per-request cost that made bundling worthwhile, and merging files that browsers cache individually means one small change invalidates all 180 KB. Every other infrastructure card is already applied. The real answer is sitting in plain sight — a 1.1 MB PNG displayed at 140x40, which is also the largest thing on screen, so it is the LCP element. Award the point to whoever ignores the senior engineer and reads the waterfall. If nobody does, that is the best possible ending to the session.',
     },
   },
 ];
