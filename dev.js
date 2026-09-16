@@ -4,9 +4,9 @@
 // root, /api/room through the function — so a rehearsal behaves like the
 // real deployment. Not used in production.
 //
-// With no Redis credentials it stubs the store in memory, so you can play
-// a full game locally with zero setup. Drop a .env next to this file (the
-// same KV_REST_API_* keys Vercel injects) to run against real Upstash.
+// With no DATABASE_URL it keeps the game in memory, so you can play a full
+// game locally with zero setup. Drop a .env next to this file with the
+// DATABASE_URL Vercel injects to rehearse against real Prisma Postgres.
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -31,33 +31,13 @@ if (!process.env.ADMIN_TOKEN) {
   console.log('ADMIN_TOKEN not set — using "dev" for this run');
 }
 
-// ---- in-memory Redis when no store is configured ----------------------
-if (!process.env.KV_REST_API_URL && !process.env.UPSTASH_REDIS_REST_URL) {
-  process.env.KV_REST_API_URL = 'http://stub';
-  process.env.KV_REST_API_TOKEN = 'stub';
-  const store = new Map();
-  global.fetch = async (_url, init) => {
-    const results = JSON.parse(init.body).map(([cmd, key, ...args]) => {
-      if (cmd === 'GET') return store.get(key) || null;
-      if (cmd === 'SET') { store.set(key, args[0]); return 'OK'; }
-      if (cmd === 'DEL') { store.delete(key); return 1; }
-      if (cmd === 'EXPIRE') return 1;
-      if (cmd === 'HSET') {
-        const h = store.get(key) || {};
-        h[args[0]] = args[1];
-        store.set(key, h);
-        return 1;
-      }
-      if (cmd === 'HGET') return (store.get(key) || {})[args[0]] || null;
-      if (cmd === 'HGETALL') {
-        const h = store.get(key) || {};
-        return Object.keys(h).flatMap((k) => [k, h[k]]);
-      }
-      throw new Error('unstubbed command ' + cmd);
-    });
-    return { ok: true, json: async () => results.map((result) => ({ result })) };
-  };
-  console.log('No Redis configured — using an in-memory store for this run');
+// A single long-lived process, so the in-memory store is safe here in a way
+// it never is on serverless — the handler refuses it unless asked.
+process.env.FIXDRAFT_ALLOW_MEMORY = '1';
+if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
+  console.log('No DATABASE_URL — keeping this game in memory');
+} else {
+  console.log('Using Prisma Postgres from DATABASE_URL');
 }
 
 const room = require('./api/room.js');

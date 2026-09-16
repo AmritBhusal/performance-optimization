@@ -5,7 +5,7 @@ import * as player from './client/player.js';
 import * as screen from './client/screen.js';
 import * as admin from './client/admin.js';
 
-const POLL_MS = 1000;
+const POLL_MS = 1500;
 
 export const session = {
   get playerId() {

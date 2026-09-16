@@ -8,15 +8,18 @@ awards the point.
 Built from [`Performance-optimization.md`](./Performance-optimization.md) — the
 scenarios and the answer keys are that document turned into rounds.
 
-No dependencies, no build step, no `package.json`. Static files plus one Vercel
-function, same shape as `../frontend-Security`.
+Static files plus one Vercel function, same shape as `../frontend-Security`. No
+build step and no framework. One dependency (`pg`) — Prisma Postgres is a real
+Postgres endpoint, so there is no Prisma Client, no `schema.prisma` and no
+migrations; the one table it needs creates itself on first use.
 
 ---
 
 ## Run it locally
 
 ```bash
-node dev.js
+npm install
+npm run dev
 ```
 
 | View    | URL                              |
@@ -25,30 +28,48 @@ node dev.js
 | Screen  | `http://localhost:3000/#/screen` |
 | Admin   | `http://localhost:3000/#/admin`  |
 
-With no Redis configured it keeps the game in memory and prints the admin token
-it generated (`dev`). Set `PORT=3111` or similar if 3000 is busy. Drop a `.env`
-with the usual `KV_REST_API_*` keys next to `dev.js` to run against real Upstash
-instead.
+With no `DATABASE_URL` it keeps the game in memory and uses `dev` as the admin
+token, so a rehearsal needs no setup at all. Set `PORT=3111` if 3000 is busy.
+Drop a `.env` next to `dev.js` with the `DATABASE_URL` from Vercel to rehearse
+against the real database.
 
-Self-check for the game logic — dealing, the phase machine, and every secrecy
-rule:
+Self-check — dealing, the phase machine, and every secrecy rule:
 
 ```bash
-node api/room.test.js
+npm test                                    # in memory
+DATABASE_URL=postgres://… npm test          # through the real SQL path
 ```
 
 ## Deploy
 
-1. `vercel` (or import the folder in the dashboard). Zero config — the repo root
-   is served static, `api/room.js` becomes the function.
-2. In the project: **Storage → Upstash for Redis → Connect**. That injects
-   `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+1. `vercel` (or import the folder in the dashboard). No framework, no build
+   command — the repo root is served static, `api/room.js` becomes the function,
+   and `npm install` picks up `pg`.
+2. In the project: **Storage → Prisma Postgres → Connect**. That sets
+   `DATABASE_URL`. Use the **pooled** connection string
+   (`pooled.db.prisma.io`) — serverless functions open and drop connections
+   constantly and the direct endpoint is not meant to absorb that.
 3. **Settings → Environment Variables → `ADMIN_TOKEN`**, set it to anything you
    will remember for the length of one meeting.
 4. Redeploy so both land.
 
 Without `ADMIN_TOKEN` set, the host controls are locked out entirely — that is
-deliberate, so a missing variable can never leave the game wide open.
+deliberate, so a missing variable can never leave the game wide open. Without
+`DATABASE_URL` the function returns 503 rather than silently falling back to a
+per-instance memory store, which on serverless would lose the game between
+requests.
+
+### Free tier headroom
+
+Prisma Postgres free is **100,000 operations/month** and 500 MB. Every client
+polls once per 1.5s and each poll is a single `SELECT`, so a 30-minute session
+with 7 devices costs roughly **8,000 operations**. A couple of rehearsals plus
+the real meeting sit comfortably inside the month. If you want more margin,
+raise `POLL_MS` in `app.js`.
+
+The table carries no TTL. Instead rows older than six hours are ignored on read
+(`SESSION_HOURS` in `api/_lib/store.js`), so a game nobody reset is simply gone
+by the next meeting.
 
 ## Running the session
 

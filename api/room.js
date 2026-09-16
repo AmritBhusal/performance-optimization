@@ -1,52 +1,26 @@
-// The whole game, held in the Redis store Vercel provisions
-// (Storage -> Upstash for Redis). Three keys, all on a TTL so an
-// abandoned game disappears by itself:
-//   fd:state    JSON  — phase machine
-//   fd:players  hash  — player id -> JSON { name, score, hand[] }
-//   fd:plays    hash  — "<round>:<playerId>" -> JSON { cardId }
-//
-// One field per writer, so two players playing at the same moment never
-// clobber each other and no locking is needed.
+// The whole game, held in Prisma Postgres as key/value rows.
+// See _lib/store.js for the row layout and why there is one row per writer.
 //
 // GET  /api/room?pid=<id>   -> state redacted for that player
 // POST /api/room  { op: 'join' | 'play' | 'deal' | 'scenario' | 'reveal'
 //                     | 'pick' | 'reset', ... }
 //
-// The admin ops are token-gated: the page sits on a public URL, so
-// without that check anyone with the link could deal, reveal and award
-// points. Join and play stay open — both are harmless, and gating them
-// would mean accounts.
+// The admin ops are token-gated: the page sits on a public URL, so without
+// that check anyone with the link could deal, reveal and award points. Join
+// and play stay open — both are harmless, and gating them would mean
+// accounts.
 
 const crypto = require('crypto');
 const G = require('./_lib/game.js');
-
-const TTL_SECONDS = 6 * 60 * 60;
-const STATE_KEY = 'fd:state';
-const PLAYERS_KEY = 'fd:players';
-const PLAYS_KEY = 'fd:plays';
+const store = require('./_lib/store.js');
 
 const MAX_PLAYERS = 40;
 const MAX_NAME = 24;
 const ADMIN_OPS = new Set(['deal', 'scenario', 'reveal', 'pick', 'reset']);
 
-const REST_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const REST_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-
-async function redis(commands) {
-  const res = await fetch(REST_URL.replace(/\/$/, '') + '/pipeline', {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + REST_TOKEN,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(commands),
-  });
-  if (!res.ok) throw new Error('Redis returned ' + res.status + ': ' + (await res.text()));
-  const rows = await res.json();
-  const failed = rows.find((r) => r && r.error);
-  if (failed) throw new Error(failed.error);
-  return rows.map((r) => r.result);
-}
+const STATE_KEY = 'state';
+const SEAT = 'seat:';
+const PLAY = 'play:';
 
 function isAdmin(supplied) {
   const expected = process.env.ADMIN_TOKEN;
@@ -59,58 +33,35 @@ function isAdmin(supplied) {
   return crypto.timingSafeEqual(a, b);
 }
 
-// HGETALL comes back as a flat [field, value, ...] array on the REST API,
-// but tolerate an object shape too.
-function toRows(hash) {
-  const out = [];
-  const push = (field, raw) => {
-    try {
-      out.push({ field: field, value: JSON.parse(raw) });
-    } catch (e) {
-      /* skip corrupt row */
-    }
-  };
-  if (Array.isArray(hash)) {
-    for (let i = 0; i < hash.length; i += 2) push(hash[i], hash[i + 1]);
-  } else if (hash && typeof hash === 'object') {
-    Object.keys(hash).forEach((k) => push(k, hash[k]));
-  }
-  return out;
-}
-
 async function readGame() {
-  const [stateRaw, playerHash, playHash] = await redis([
-    ['GET', STATE_KEY],
-    ['HGETALL', PLAYERS_KEY],
-    ['HGETALL', PLAYS_KEY],
-  ]);
+  const rows = await store.readAll();
 
-  const state = stateRaw ? JSON.parse(stateRaw) : G.freshState();
-  const players = toRows(playerHash)
-    .map((r) => Object.assign({ id: r.field, score: 0, hand: [] }, r.value))
-    .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
-  const plays = toRows(playHash).map((r) => r.value);
+  let state = null;
+  const players = [];
+  const plays = [];
 
-  return { state: state, players: players, plays: plays };
-}
+  for (const row of rows) {
+    if (row.key === STATE_KEY) state = row.value;
+    else if (row.key.startsWith(SEAT)) {
+      players.push(Object.assign({ id: row.key.slice(SEAT.length), score: 0, hand: [] }, row.value));
+    } else if (row.key.startsWith(PLAY)) {
+      plays.push(row.value);
+    }
+  }
 
-function saveState(state) {
-  return ['SET', STATE_KEY, JSON.stringify(state), 'EX', String(TTL_SECONDS)];
-}
-
-function savePlayer(id, player) {
-  return [
-    ['HSET', PLAYERS_KEY, id, JSON.stringify(player)],
-    ['EXPIRE', PLAYERS_KEY, String(TTL_SECONDS)],
-  ];
+  players.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+  return { state: state || G.freshState(), players: players, plays: plays };
 }
 
 function cleanName(raw) {
   if (typeof raw !== 'string') return null;
   const name = raw
-    .split("")
-    .filter(function (ch) { var c = ch.charCodeAt(0); return c >= 32 && c !== 127; })
-    .join("")
+    .split('')
+    .filter(function (ch) {
+      const c = ch.charCodeAt(0);
+      return c >= 32 && c !== 127;
+    })
+    .join('')
     .trim()
     .slice(0, MAX_NAME);
   return name.length ? name : null;
@@ -136,14 +87,12 @@ async function handle(method, body, query, admin) {
     if (!name) throw new Error('A name is required to join');
 
     const game = await readGame();
-    const byId = body.playerId
-      ? game.players.find((p) => p.id === body.playerId)
-      : null;
+    const byId = body.playerId ? game.players.find((p) => p.id === body.playerId) : null;
 
     if (byId) {
       // Rejoin after a refresh or a locked screen — same seat, same hand.
       if (byId.name !== name) {
-        await redis(savePlayer(byId.id, Object.assign({}, byId, { name: name })));
+        await store.put(SEAT + byId.id, Object.assign({}, byId, { name: name }));
       }
       return { playerId: byId.id, name: name };
     }
@@ -160,15 +109,13 @@ async function handle(method, body, query, admin) {
     if (game.players.length >= MAX_PLAYERS) throw new Error('This game is full');
 
     const id = G.newId();
-    await redis(
-      savePlayer(id, {
-        name: name,
-        score: 0,
-        hand: [],
-        joinedAt: Date.now(),
-        session: game.state.session,
-      }),
-    );
+    await store.put(SEAT + id, {
+      name: name,
+      score: 0,
+      hand: [],
+      joinedAt: Date.now(),
+      session: game.state.session,
+    });
     return { playerId: id, name: name };
   }
 
@@ -184,32 +131,24 @@ async function handle(method, body, query, admin) {
     );
     if (already) throw new Error('You already played this round');
 
-    const field = game.state.round + ':' + body.playerId;
-    await redis(
+    await store.putMany([
       [
-        ['HSET', PLAYS_KEY, field, JSON.stringify({
-          round: game.state.round,
-          playerId: body.playerId,
-          cardId: body.cardId,
-        })],
-        ['EXPIRE', PLAYS_KEY, String(TTL_SECONDS)],
-      ].concat(
-        savePlayer(
-          player.id,
-          Object.assign({}, player, {
-            hand: player.hand.filter((id) => id !== body.cardId),
-          }),
-        ),
-      ),
-    );
+        PLAY + game.state.round + ':' + body.playerId,
+        { round: game.state.round, playerId: body.playerId, cardId: body.cardId },
+      ],
+      [
+        SEAT + player.id,
+        Object.assign({}, player, { hand: player.hand.filter((id) => id !== body.cardId) }),
+      ],
+    ]);
     return { ok: true };
   }
 
   // ---- admin ops --------------------------------------------------
 
   if (op === 'reset') {
-    const state = G.freshState();
-    await redis([['DEL', PLAYERS_KEY], ['DEL', PLAYS_KEY], saveState(state)]);
+    await store.deleteAll();
+    await store.put(STATE_KEY, G.freshState());
     return { ok: true };
   }
 
@@ -217,8 +156,7 @@ async function handle(method, body, query, admin) {
     const game = await readGame();
     if (!game.players.length) throw new Error('Nobody has joined yet');
 
-    const ids = game.players.map((p) => p.id);
-    const dealt = G.dealHands(ids, G.shuffle(G.DECK_IDS));
+    const dealt = G.dealHands(game.players.map((p) => p.id), G.shuffle(G.DECK_IDS));
 
     const state = Object.assign(G.freshState(), {
       phase: 'dealt',
@@ -228,34 +166,34 @@ async function handle(method, body, query, admin) {
       session: game.state.session,
     });
 
-    // Scores survive a re-deal; plays do not, or round 1 would inherit
-    // the cards played in the previous game's round 1.
-    const cmds = [['DEL', PLAYS_KEY], saveState(state)];
-    for (const p of game.players) {
-      cmds.push(['HSET', PLAYERS_KEY, p.id, JSON.stringify(
-        Object.assign({}, p, { hand: dealt.hands[p.id] }),
-      )]);
-    }
-    cmds.push(['EXPIRE', PLAYERS_KEY, String(TTL_SECONDS)]);
-    await redis(cmds);
+    // Scores survive a re-deal; plays do not, or round 1 would inherit the
+    // cards played in the previous game's round 1.
+    await store.deletePrefix(PLAY);
+    await store.putMany(
+      [[STATE_KEY, state]].concat(
+        game.players.map((p) => [SEAT + p.id, Object.assign({}, p, { hand: dealt.hands[p.id] })]),
+      ),
+    );
     return { ok: true };
   }
 
   if (op === 'scenario') {
     const game = await readGame();
     const next = game.state.round + 1;
-    const state = Object.assign({}, game.state, {
-      round: next,
-      phase: next > game.state.totalRounds ? 'final' : 'playing',
-      winner: null,
-    });
-    await redis([saveState(state)]);
+    await store.put(
+      STATE_KEY,
+      Object.assign({}, game.state, {
+        round: next,
+        phase: next > game.state.totalRounds ? 'final' : 'playing',
+        winner: null,
+      }),
+    );
     return { ok: true };
   }
 
   if (op === 'reveal') {
     const game = await readGame();
-    await redis([saveState(Object.assign({}, game.state, { phase: 'revealed' }))]);
+    await store.put(STATE_KEY, Object.assign({}, game.state, { phase: 'revealed' }));
     return { ok: true };
   }
 
@@ -267,15 +205,21 @@ async function handle(method, body, query, admin) {
     const play = game.plays.find(
       (p) => p.round === game.state.round && p.playerId === winner.id,
     );
-    const state = Object.assign({}, game.state, {
-      phase: 'judged',
-      winner: { playerId: winner.id, name: winner.name, cardId: play ? play.cardId : null },
-    });
-    await redis(
-      [saveState(state)].concat(
-        savePlayer(winner.id, Object.assign({}, winner, { score: (winner.score || 0) + 1 })),
-      ),
-    );
+
+    await store.putMany([
+      [
+        STATE_KEY,
+        Object.assign({}, game.state, {
+          phase: 'judged',
+          winner: {
+            playerId: winner.id,
+            name: winner.name,
+            cardId: play ? play.cardId : null,
+          },
+        }),
+      ],
+      [SEAT + winner.id, Object.assign({}, winner, { score: (winner.score || 0) + 1 })],
+    ]);
     return { ok: true };
   }
 
@@ -285,10 +229,10 @@ async function handle(method, body, query, admin) {
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
 
-  if (!REST_URL || !REST_TOKEN) {
+  if (!store.isConfigured && !store.allowMemory) {
     res.status(503).json({
       error:
-        'No Redis store connected. Add Upstash for Redis under Storage in the Vercel project, then redeploy.',
+        'No database connected. Add Prisma Postgres under Storage in the Vercel project so DATABASE_URL is set, then redeploy.',
     });
     return;
   }

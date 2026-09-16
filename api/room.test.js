@@ -1,35 +1,13 @@
 // Self-check for the room handler: node api/room.test.js
-// Stubs Redis with an in-memory pipeline so no store is needed.
+// Runs against the in-memory store, so no database is needed.
 const assert = require('assert');
 
-process.env.KV_REST_API_URL = 'http://stub';
-process.env.KV_REST_API_TOKEN = 'stub';
+// Runs in memory by default. Point DATABASE_URL at any Postgres to run the
+// same checks through the real SQL path:
+//   DATABASE_URL=postgres://... node api/room.test.js
+process.env.FIXDRAFT_ALLOW_MEMORY = '1';
 process.env.ADMIN_TOKEN = 'test-token';
-
-const store = new Map();
-
-global.fetch = async (_url, init) => {
-  const commands = JSON.parse(init.body);
-  const results = commands.map(([cmd, key, ...args]) => {
-    if (cmd === 'GET') return store.get(key) || null;
-    if (cmd === 'SET') { store.set(key, args[0]); return 'OK'; }
-    if (cmd === 'DEL') { store.delete(key); return 1; }
-    if (cmd === 'EXPIRE') return 1;
-    if (cmd === 'HSET') {
-      const h = store.get(key) || {};
-      h[args[0]] = args[1];
-      store.set(key, h);
-      return 1;
-    }
-    if (cmd === 'HGET') return (store.get(key) || {})[args[0]] || null;
-    if (cmd === 'HGETALL') {
-      const h = store.get(key) || {};
-      return Object.keys(h).flatMap((k) => [k, h[k]]); // REST returns a flat array
-    }
-    throw new Error('unstubbed command ' + cmd);
-  });
-  return { ok: true, json: async () => results.map((result) => ({ result })) };
-};
+console.log(process.env.DATABASE_URL ? 'Running against Postgres' : 'Running in memory');
 
 const handler = require('./room.js');
 const { SCENARIOS } = require('./_lib/scenarios.js');
@@ -205,6 +183,7 @@ const ADMIN = 'test-token';
   assert.strictEqual(r.body.players.length, 0);
 
   console.log('All checks passed.');
+  process.exit(0); // the pg pool would otherwise hold the process open
 })().catch((e) => {
   console.error(e);
   process.exit(1);
