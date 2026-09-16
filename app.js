@@ -24,10 +24,13 @@ export const session = {
   },
 };
 
+/** Tolerant on purpose: #/admin, #admin and #Admin all land on the host
+ *  controls. Getting this wrong silently drops you on the join page, which
+ *  is a bad thing to discover with a room watching. */
 function route() {
-  const h = location.hash;
-  if (h.startsWith('#/screen')) return 'screen';
-  if (h.startsWith('#/admin')) return 'admin';
+  const h = location.hash.replace(/^#\/*/, '').toLowerCase();
+  if (h.startsWith('screen')) return 'screen';
+  if (h.startsWith('admin')) return 'admin';
   return 'player';
 }
 
